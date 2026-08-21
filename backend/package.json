@@ -1,0 +1,37 @@
+{
+  "name": "savannah-crm-backend",
+  "version": "1.0.0",
+  "description": "API do CRM imobiliário Savannah Imóveis",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "scripts": {
+    "postinstall": "prisma generate",
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js",
+    "build": "prisma generate && prisma migrate deploy",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "seed": "node prisma/seed.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.19.1",
+    "basic-ftp": "^6.0.1",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-validator": "^7.2.0",
+    "fast-xml-parser": "^5.10.1",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.1.1",
+    "node-cron": "^4.6.0",
+    "pdfkit": "^0.15.0",
+    "xlsx": "^0.18.5",
+    "prisma": "^5.19.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}

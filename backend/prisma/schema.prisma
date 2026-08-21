@@ -1,0 +1,529 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Usuários que acessam o sistema (equipe interna da Savannah). O "role" define o perfil
+// de acesso (ADMINISTRADOR | COLABORADOR | CONTADOR) - o que cada perfil pode ver/editar
+// é controlado pela tabela PermissaoRole, editável pelo administrador.
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  nome      String
+  email     String @unique
+  senha     String
+  telefone  String?
+  creci     String?
+  role      String @default("COLABORADOR")  // ADMINISTRADOR | COLABORADOR | CONTADOR
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+}
+
+// Permissões de acesso por perfil (role): para cada módulo do sistema, define se o
+// perfil pode visualizar e se pode editar. O perfil ADMINISTRADOR sempre tem acesso
+// completo (checagem fixa no backend, não depende desta tabela); os demais perfis usam
+// o que estiver configurado aqui - editável pelo administrador na tela de Usuários.
+model PermissaoRole {
+  id             Int    @id @default(autoincrement())
+  role           String @unique  // COLABORADOR | CONTADOR (ADMINISTRADOR não usa esta tabela)
+  permissoesJson String // JSON: { "imoveis": {"ver":true,"editar":false}, ... }
+}
+
+model Proprietario {
+  id                Int      @id @default(autoincrement())
+  nome              String
+  nacionalidade     String?
+  estadoCivil       String?
+  conjugeNome       String?
+  conjugeCpfCnpj    String?
+  conjugeTelefone   String?
+  conjugeRg         String?
+  conjugeEmail      String?
+  profissao         String?
+  ramoAtividade     String? // ramo de atividade da empresa - usado no lugar de "profissão" quando o proprietário é PJ
+  cpfCnpj           String?
+  rg                String?
+  endereco          String?  // logradouro (rua/avenida) do proprietário
+  numero            String?
+  bairro            String?
+  cidade            String?
+  estado            String?
+  cep               String?
+  telefone          String?
+  telefoneAdicional String?
+  email             String?
+  // Sócio(s)/representante(s) legal(is) que assina(m) pelo proprietário quando ele é PJ
+  // (cpfCnpj com 14 dígitos) - opcional, alguns contratos exigem 2 sócios assinando.
+  socioResponsavelNome      String?
+  socioResponsavelCpf       String?
+  socioResponsavelTelefone  String?
+  socioResponsavelEmail     String?
+  socioResponsavel2Nome     String?
+  socioResponsavel2Cpf      String?
+  socioResponsavel2Telefone String?
+  socioResponsavel2Email    String?
+  chavePix          String?
+  tipoChavePix      String? // celular | cpf | cnpj | email | aleatoria - salvo explicitamente pra não precisar "adivinhar" o tipo pelo formato da chave (CPF e celular têm os dois 11 dígitos, é ambíguo sem isso)
+  bancoNome         String?
+  bancoAgencia      String?
+  bancoConta        String?
+  tipoContaBancaria String?  // corrente | poupanca
+  diaRepasse        Int? // dia do mês programado para o repasse (1-31)
+  observacoes       String?
+  imoveis           Imovel[]
+  notasFiscais      NotaFiscal[]
+  criadoEm          DateTime @default(now())
+}
+
+// Notas fiscais lançadas para um proprietário: podem ser cadastradas via
+// upload do XML (dados extraídos automaticamente) ou manualmente informando
+// a chave de acesso e os dados básicos. Gera um PDF simplificado para
+// envio/impressão e pode ser enviado ao proprietário via WhatsApp.
+model NotaFiscal {
+  id              Int          @id @default(autoincrement())
+  proprietarioId  Int
+  proprietario    Proprietario @relation(fields: [proprietarioId], references: [id])
+  tipo            String @default("NFE")  // NFE | NFSE | NFA | OUTRA
+  numero          String?
+  serie           String?
+  chaveAcesso     String?  // 44 dígitos (NFe/NFCe/NFA-e) - opcional para NFS-e
+  dataEmissao     DateTime?
+  valorTotal      Decimal?
+  emitenteNome    String?
+  emitenteCnpj    String?
+  discriminacao   String? // descrição do serviço/produto
+  observacoes     String?
+  xmlConteudo     String? // XML original, quando enviado por upload
+  xmlNomeArquivo  String?
+  detalhesJson    String? // JSON com dados extras extraídos do XML (destinatário, itens, protocolo, natureza da operação etc.), usado para montar um PDF mais completo
+  pdfPath         String?  // caminho do PDF gerado para envio/impressão
+  criadoEm        DateTime     @default(now())
+}
+
+model Imovel {
+  id            Int           @id @default(autoincrement())
+  nome          String?  // apelido/nome dado ao imóvel pelo usuário
+  endereco      String  // logradouro (rua/avenida)
+  numero        String?
+  complemento   String?  // info manual adicional (ex: bloco, fundos, apto, casa dos fundos)
+  bairro        String?
+  cidade        String
+  estado        String
+  cep           String
+  tipo          String  // casa, apartamento, etc.
+  descricao     String? // características detalhadas (ex: "150m², 1 suíte com ar condicionado, cozinha planejada...") - usado nos termos de vistoria e rescisão, diferente do estado de conservação simples da vistoria
+  valorAluguel  Decimal
+  valorIptu     Decimal? // IPTU anual/mensal cadastrado - usado pra preencher automaticamente o IPTU do pagamento
+  foto          String?  // caminho do arquivo de imagem
+  dataVistoria  DateTime? // última vistoria registrada no imóvel
+  proprietarioId Int?
+  proprietario  Proprietario? @relation(fields: [proprietarioId], references: [id])
+  status        String        @default("DISPONIVEL")
+  inquilinoId   Int?
+  inquilino     Inquilino?    @relation(fields: [inquilinoId], references: [id])
+  contratos     Contrato[]
+  criadoEm      DateTime      @default(now())
+  atualizadoEm  DateTime      @updatedAt
+}
+
+model Inquilino {
+  id                Int         @id @default(autoincrement())
+  nome              String
+  cpfCnpj           String @unique
+  rgCnh             String?
+  telefone          String  // usado tb para WhatsApp
+  telefoneAdicional String?
+  email             String?
+  enderecoAtual     String?  // logradouro (rua/avenida) do inquilino
+  numeroAtual       String?
+  bairroAtual       String?
+  cidadeAtual       String?
+  estadoAtual       String?
+  cepAtual          String?
+  profissao         String?
+  ramoAtividade     String? // ramo de atividade da empresa - usado no lugar de "profissão" quando o inquilino é PJ
+  mediaSalarial     Decimal?
+  escolaridade      String?
+  estadoCivil       String?
+  conjugeNome       String?
+  conjugeCpfCnpj    String?
+  conjugeTelefone   String?
+  conjugeRg         String?
+  conjugeEmail      String?
+  dependentes       Int?        @default(0)
+  declaraIrpf       Boolean? // declara Imposto de Renda? (Sim/Não)
+  chavePix          String?  // usado em devoluções (ex: reembolso de caução)
+  tipoChavePix      String? // celular | cpf | cnpj | email | aleatoria
+
+  // Sócio/representante legal que assina pelo locatário quando ele é PJ (cpfCnpj com 14 dígitos).
+  // Opcional - só relevante quando o locatário é uma empresa.
+  // Os 2 campos abaixo (socioResponsavel/socioResponsavel2) são o formato antigo, mantido só
+  // para não perder dados já cadastrados. A partir de agora, uso o campo "sociosJson" (lista
+  // com quantos sócios forem necessários) - o formulário sempre lê e grava em sociosJson.
+  socioResponsavelNome String?
+  socioResponsavelCpf  String?
+  socioResponsavel2Nome String?
+  socioResponsavel2Cpf  String?
+  socioResponsavelTelefone  String?
+  socioResponsavelEmail     String?
+  socioResponsavel2Telefone String?
+  socioResponsavel2Email    String?
+  sociosJson String? // JSON: [{ nome, cpf, rg, telefone, email }, ...] - lista completa de sócios/representantes (PJ)
+
+  // Fiador padrão deste inquilino (preenche automaticamente ao criar um contrato, editável por contrato)
+  fiadorNome        String?
+  fiadorCpf         String?
+  fiadorRg          String?
+  fiadorEndereco    String?
+  fiadorNumero    String?
+  fiadorBairro    String?
+  fiadorCidade    String?
+  fiadorEstado    String?
+  fiadorCep       String?
+  fiadorTelefone    String?
+  fiadorEmail       String?
+  fiadorProfissao   String?
+  fiadorEstadoCivil String?
+  fiadorConjugeNome     String?
+  fiadorConjugeCpf      String?
+  fiadorConjugeTelefone String?
+  fiadorConjugeRg       String?
+  fiadorConjugeEmail       String?
+  // Sócio/representante legal que assina pelo fiador quando ele é PJ (fiadorCpf com 14 dígitos)
+  fiadorSocioResponsavelNome String?
+  fiadorSocioResponsavelCpf  String?
+  fiadorSocioResponsavel2Nome String?
+  fiadorSocioResponsavel2Cpf  String?
+  fiadorSocioResponsavelTelefone  String?
+  fiadorSocioResponsavelEmail     String?
+  fiadorSocioResponsavel2Telefone String?
+  fiadorSocioResponsavel2Email    String?
+  // Perfil socioeconômico do fiador (mesmos campos do locatário)
+  fiadorMediaSalarial Decimal?
+  fiadorPatrimonio Decimal?
+  fiadorEscolaridade  String?
+  fiadorDependentes   Int?     @default(0)
+  fiadorDeclaraIrpf   Boolean?
+
+  // Segundo fiador (opcional - alguns contratos exigem mais de um fiador)
+  fiador2Nome        String?
+  fiador2Cpf         String?
+  fiador2Rg          String?
+  fiador2Endereco    String?
+  fiador2Numero    String?
+  fiador2Bairro    String?
+  fiador2Cidade    String?
+  fiador2Estado    String?
+  fiador2Cep       String?
+  fiador2Telefone    String?
+  fiador2Email       String?
+  fiador2Profissao   String?
+  fiador2EstadoCivil String?
+  fiador2ConjugeNome     String?
+  fiador2ConjugeCpf      String?
+  fiador2ConjugeTelefone String?
+  fiador2ConjugeRg       String?
+  fiador2ConjugeEmail       String?
+  // Sócio/representante legal que assina pelo 2º fiador quando ele é PJ (fiador2Cpf com 14 dígitos)
+  fiador2SocioResponsavelNome String?
+  fiador2SocioResponsavelCpf  String?
+  fiador2SocioResponsavel2Nome String?
+  fiador2SocioResponsavel2Cpf  String?
+  fiador2SocioResponsavelTelefone  String?
+  fiador2SocioResponsavelEmail     String?
+  fiador2SocioResponsavel2Telefone String?
+  fiador2SocioResponsavel2Email    String?
+  // Perfil socioeconômico do 2º fiador
+  fiador2MediaSalarial Decimal?
+  fiador2Patrimonio Decimal?
+  fiador2Escolaridade  String?
+  fiador2Dependentes   Int?     @default(0)
+  fiador2DeclaraIrpf   Boolean?
+
+  // Testemunhas padrão deste inquilino (preenche automaticamente ao criar um contrato, editável por contrato)
+  testemunha1Nome String?
+  testemunha1Cpf  String?
+  testemunha2Nome String?
+  testemunha2Cpf  String?
+
+  imoveis           Imovel[]
+  contratos         Contrato[]
+  pagamentos        Pagamento[]
+  criadoEm          DateTime    @default(now())
+}
+
+model Contrato {
+  id                          Int         @id @default(autoincrement())
+  inquilinoId                 Int
+  inquilino                   Inquilino   @relation(fields: [inquilinoId], references: [id])
+  imovelId                    Int
+  imovel                      Imovel      @relation(fields: [imovelId], references: [id])
+  valorAluguel                Decimal
+  caucao                      Decimal?
+  percentualComissao          Decimal? // % mensal retido para a imobiliária em cada pagamento
+  percentualTaxaIntermediacao Decimal? // % cobrado pela intermediação da locação (aplicado em cada mês indicado em mesesIntermediacao)
+  mesesIntermediacao          String? @default("1") // meses do contrato (1º, 2º...) em que a intermediação é cobrada - lista separada por vírgula, ex: "1,2"
+  dataInicio                  DateTime
+  dataEntrada                 DateTime? // data real de entrada/mudança do inquilino, usada pra calcular o 1º aluguel proporcional aos dias restantes do mês (quando diferente de dataInicio)
+  dataFim                     DateTime?
+  dataVencimento               DateTime? // legado - mantido só pra não quebrar contratos antigos, não é mais editado pela tela
+  diaVencimento                Int?      // dia do mês (1-31) combinado pro vencimento do aluguel - o mês/ano é sempre o do período do contrato
+  vencimentoQuintoDiaUtil       Boolean   @default(false) // quando true, o vencimento é sempre o 5º dia útil do mês (ignora diaVencimento)
+  despesasAdicionais           String? // despesas extras sob responsabilidade do inquilino, separadas por vírgula (ex: "agua,luz,condominio,gas,esgoto,seguro,iptu") - aparecem no contrato quando selecionadas
+  observacoes                 String? // cláusulas ou observações extras específicas deste contrato (bloco livre, entra antes do imóvel)
+  clausulasAdicionaisJson     String? // JSON: [{ clausula, texto }, ...] - texto complementar inserido dentro de uma cláusula específica já existente no modelo (não um bloco solto)
+  tipoGarantia                 String? @default("PROPRIO")  // PROPRIO (fiador pessoal) | CAUCAO | SEGURO_LOFT (Seguro Locatício LOFT) | GARANTIA_INVESTE_LOFT (Garantia Investe LOFT - apenas locatário CPF)
+  indiceReajuste                String? @default("IVAR")  // índice de reajuste anual do aluguel: IVAR | IGPM | IPCA | INPC
+  numeroContrato                String? // número do contrato usado nos documentos/demonstrativos - se vazio, usa o padrão gerado automaticamente (####/ano)
+  dataAssinatura                DateTime? // data que aparece no rodapé do contrato ("Canoinhas, DD de mês de AAAA") - permite gerar contratos retroativos com a data correta; se vazia, usa a data de hoje
+
+  // Caução (usado quando tipoGarantia = CAUCAO) - valor total fica no campo "caucao" já
+  // existente; aqui só o parcelamento e a data do primeiro pagamento
+  caucaoParcelas       Int?      @default(1) // número de parcelas do depósito caução (1 = à vista)
+  caucaoDataPagamento  DateTime? // data do pagamento (ou da 1ª parcela, quando parcelado)
+
+  // Fiador (opcional, usado quando tipoGarantia = PROPRIO)
+  fiadorNome        String?
+  fiadorCpf         String?
+  fiadorRg          String?
+  fiadorEndereco    String?
+  fiadorNumero    String?
+  fiadorBairro    String?
+  fiadorCidade    String?
+  fiadorEstado    String?
+  fiadorCep       String?
+  fiadorTelefone    String?
+  fiadorEmail       String?
+  fiadorProfissao   String?
+  fiadorEstadoCivil String?
+  fiadorConjugeNome     String?
+  fiadorConjugeCpf      String?
+  fiadorConjugeTelefone String?
+  fiadorConjugeRg       String?
+  fiadorConjugeEmail       String?
+  fiadorSocioResponsavelNome String?  // sócio/representante legal, quando o fiador é PJ
+  fiadorSocioResponsavelCpf  String?
+  fiadorSocioResponsavel2Nome String?
+  fiadorSocioResponsavel2Cpf  String?
+  fiadorSocioResponsavelTelefone  String?
+  fiadorSocioResponsavelEmail     String?
+  fiadorSocioResponsavel2Telefone String?
+  fiadorSocioResponsavel2Email    String?
+  fiadorMediaSalarial Decimal?
+  fiadorPatrimonio Decimal?
+  fiadorEscolaridade  String?
+  fiadorDependentes   Int?
+  fiadorDeclaraIrpf   Boolean?
+
+  // Segundo fiador (opcional - alguns contratos exigem mais de um fiador)
+  fiador2Nome        String?
+  fiador2Cpf         String?
+  fiador2Rg          String?
+  fiador2Endereco    String?
+  fiador2Numero    String?
+  fiador2Bairro    String?
+  fiador2Cidade    String?
+  fiador2Estado    String?
+  fiador2Cep       String?
+  fiador2Telefone    String?
+  fiador2Email       String?
+  fiador2Profissao   String?
+  fiador2EstadoCivil String?
+  fiador2ConjugeNome     String?
+  fiador2ConjugeCpf      String?
+  fiador2ConjugeTelefone String?
+  fiador2ConjugeRg       String?
+  fiador2ConjugeEmail       String?
+  fiador2SocioResponsavelNome String?  // sócio/representante legal, quando o 2º fiador é PJ
+  fiador2SocioResponsavelCpf  String?
+  fiador2SocioResponsavel2Nome String?
+  fiador2SocioResponsavel2Cpf  String?
+  fiador2SocioResponsavelTelefone  String?
+  fiador2SocioResponsavelEmail     String?
+  fiador2SocioResponsavel2Telefone String?
+  fiador2SocioResponsavel2Email    String?
+  fiador2MediaSalarial Decimal?
+  fiador2Patrimonio Decimal?
+  fiador2Escolaridade  String?
+  fiador2Dependentes   Int?
+  fiador2DeclaraIrpf   Boolean?
+
+  // Sócio/representante legal que assina pelo locatário, quando ele é PJ
+  socioResponsavelNome String?
+  socioResponsavelCpf  String?
+  socioResponsavel2Nome String?
+  socioResponsavel2Cpf  String?
+  socioResponsavelTelefone  String?
+  socioResponsavelEmail     String?
+  socioResponsavel2Telefone String?
+  socioResponsavel2Email    String?
+
+  // Assinantes extras (formato livre, além dos campos estruturados acima)
+  assinantesAdicionais String?
+
+  // Testemunhas (opcional)
+  testemunha1Nome String?
+  testemunha1Cpf  String?
+  testemunha2Nome String?
+  testemunha2Cpf  String?
+
+  // Termo de vistoria - inicial (entrada) e final (saída), independentes
+  dataVistoriaInicial      DateTime?
+  checklistVistoriaInicial String?
+  dataVistoriaFinal        DateTime?
+  checklistVistoriaFinal   String?
+
+  // Rescisão / distrato
+  dataRescisao        DateTime?
+  motivoRescisao      String?
+  multaRescisao       Decimal?
+  observacoesRescisao String?
+
+  arquivoPdfLocacao        String?  // caminho do PDF do contrato de locação
+  arquivoPdfIntermediacao  String?  // caminho do PDF do contrato de intermediação
+  arquivoPdfVistoriaInicial String?  // caminho do PDF do termo de vistoria de entrada
+  arquivoPdfVistoriaFinal   String?  // caminho do PDF do termo de vistoria de saída
+  arquivoPdfRescisao        String?  // caminho do PDF do distrato/rescisão
+
+  pagamentos Pagamento[]
+  criadoEm   DateTime    @default(now())
+}
+
+// Modelos (templates) padrão de documentos, editáveis pelo admin - um por tipo
+// (LOCACAO, INTERMEDIACAO, VISTORIA). Usa placeholders como {{NOME_INQUILINO}}
+// que são substituídos automaticamente na geração do PDF.
+model ModeloContrato {
+  id           Int      @id @default(autoincrement())
+  tipo         String @unique  // LOCACAO | INTERMEDIACAO | VISTORIA
+  conteudo     String
+  atualizadoEm DateTime @updatedAt
+}
+
+// Dados da imobiliária usados no cabeçalho e assinatura dos documentos gerados
+// Contador(a) responsável pela contabilidade da imobiliária - recebe os demonstrativos
+// anuais de rendimentos/pagamentos por WhatsApp todo mês.
+model Contador {
+  id           Int      @id @default(autoincrement())
+  nome         String
+  telefone     String
+  email        String?
+  cpfCnpj      String?
+  observacoes  String?
+  criadoEm     DateTime @default(now())
+}
+
+// Testemunha(s) cadastrada(s) - pode ser reaproveitada em vários contratos, em vez de
+// digitar nome/CPF toda vez que a mesma pessoa testemunha uma assinatura.
+model Testemunha {
+  id        Int      @id @default(autoincrement())
+  nome      String
+  cpf       String?
+  email     String?
+  telefone  String?
+  criadoEm  DateTime @default(now())
+}
+
+// Textos configuráveis dos PDFs/recibos gerados pelo sistema (notas de rodapé,
+// avisos legais etc.) - mesmo padrão do ModeloContrato/ModeloMensagemWhatsapp:
+// o texto padrão fica no código, e aqui só entra quando o usuário customiza algo.
+model ModeloTextoPdf {
+  id        Int      @id @default(autoincrement())
+  tipo      String   @unique
+  conteudo  String
+  criadoEm  DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+}
+
+model ConfiguracaoEmpresa {
+  id           Int      @id @default(1)
+  nomeEmpresa  String @default("Savannah Imóveis")
+  creci        String?
+  cnpj         String?
+  endereco     String?  // logradouro (rua/avenida)
+  numero       String?
+  bairro       String?
+  cidade       String?
+  estado       String?
+  cep          String?
+  telefone     String?
+  email        String?
+  corretoraResponsavelNome String?
+  corretoraResponsavelCpf  String?
+  corretoraResponsavelRg   String?
+  chavePix     String?
+  tipoChavePix String? // celular | cpf | cnpj | email | aleatoria
+  bancoNome    String?
+  bancoAgencia String?
+  bancoConta   String?
+  atualizadoEm DateTime @updatedAt
+}
+
+// Textos padrão (editáveis pelo admin) usados como corpo da mensagem de WhatsApp
+// ao enviar cada tipo de documento - um registro por tipo. Usa os mesmos placeholders
+// {{...}} do ModeloContrato, substituídos pelos dados reais na hora do envio.
+model ModeloMensagemWhatsapp {
+  id           Int      @id @default(autoincrement())
+  tipo         String @unique  // RECIBO | CONTRATO | DEMONSTRATIVO | NOTA_FISCAL
+  conteudo     String
+  atualizadoEm DateTime @updatedAt
+}
+
+model Pagamento {
+  id                    Int             @id @default(autoincrement())
+  inquilinoId           Int
+  inquilino             Inquilino       @relation(fields: [inquilinoId], references: [id])
+  contratoId            Int?
+  contrato              Contrato?       @relation(fields: [contratoId], references: [id])
+  tipo                  String @default("ALUGUEL")  // ALUGUEL | CAUCAO | TAXA
+  valor                 Decimal // valor base (aluguel/caução/taxa), usado para comissão e relatórios
+  itens                 PagamentoItem[] // encargos adicionais (ex: taxa de mudança, gás) - itemizados só no recibo
+  referenteMes          String  // ex: "2026-07"
+  metodo                String          @default("PIX")
+  status                String          @default("PENDENTE")
+  dataVencimento        DateTime
+  dataPagamento         DateTime?
+  reciboPdf             String?
+  reciboRepassePdf      String?  // caminho do PDF do recibo de repasse enviado ao proprietário
+  dadosNotaFiscalPdf    String?  // caminho do PDF com os dados compilados para o proprietário emitir a nota fiscal
+  percentualImobiliaria Decimal? // % retido pela imobiliária neste pagamento (calculado só sobre o aluguel, sem IPTU/condomínio)
+  percentualIntermediacao Decimal? // % da taxa de intermediação aplicada neste pagamento (a fonte é sempre o percentual, não o R$)
+  valorIntermediacao    Decimal? // valor em R$ já calculado (valor do aluguel x percentualIntermediacao) - guardado pra facilitar relatórios
+  deducoes              Decimal? // IPTU/condomínio/taxas somadas ao repasse ao proprietário (não é desconto - ver calcularRepasse)
+  valorIptu             Decimal? // quebra de "deducoes": parte referente a IPTU
+  valorCondominio       Decimal? // quebra de "deducoes": parte referente a condomínio/taxas
+  valorRepasse          Decimal? // valor líquido devido ao proprietário (aluguel - comissão - intermediação + IPTU + condomínio)
+  repassado             Boolean         @default(false)
+  dataRepasse           DateTime?
+  prazoRepasseEm               DateTime? // dataPagamento + 5 dias - prazo máximo pra repassar ao proprietário
+  lembreteVencimentoEnviadoEm  DateTime? // controla pra não mandar o lembrete de "vence hoje" duas vezes
+  avisoAtrasoEnviadoEm         DateTime? // controla pra não mandar o aviso de "atrasado" duas vezes
+  avisoRepassePendenteEnviadoEm DateTime? // controla o aviso interno de "prazo de repasse vence hoje"
+  avisoRepasseAtrasadoEnviadoEm DateTime? // controla o aviso interno de "prazo de repasse estourou"
+  criadoEm              DateTime        @default(now())
+}
+
+// Notificações internas (sino no topo do sistema) para a equipe: pagamento vence hoje,
+// pagamento recebido, imóvel mudou de status/está prestes a vagar. Não são por usuário -
+// a equipe toda vê o mesmo feed, o suficiente para o tamanho da operação hoje.
+model Notificacao {
+  id       Int      @id @default(autoincrement())
+  tipo     String  // PAGAMENTO_VENCE_HOJE | PAGAMENTO_RECEBIDO | IMOVEL_STATUS
+  titulo   String
+  mensagem String
+  link     String?  // rota do frontend pra abrir direto o que gerou a notificação
+  lida     Boolean  @default(false)
+  criadoEm DateTime @default(now())
+}
+
+// Encargos adicionais lançados junto de um pagamento (ex: taxa de mudança, consumo de gás),
+// exibidos como itens separados no recibo, somados ao valor base para o total final
+model PagamentoItem {
+  id          Int       @id @default(autoincrement())
+  pagamentoId Int
+  pagamento   Pagamento @relation(fields: [pagamentoId], references: [id], onDelete: Cascade)
+  descricao   String
+  valor       Decimal
+}

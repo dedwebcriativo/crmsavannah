@@ -1,0 +1,74 @@
+{
+  "name": "crmsavannah-desktop",
+  "version": "1.0.0",
+  "description": "CRM Savannah - aplicativo desktop",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "rcedit": "^3.1.0"
+  },
+  "build": {
+    "appId": "com.crmsavannah",
+    "productName": "CRM Savannah",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "package.json",
+      "icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!**/*.log",
+          "!arquivos/**"
+        ]
+      },
+      {
+        "from": "../frontend/.next/standalone",
+        "to": "frontend",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../frontend/.next/static",
+        "to": "frontend/.next/static",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../frontend/public",
+        "to": "frontend/public",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": false,
+      "icon": "build/icon.ico"
+    },
+    "afterPack": "./afterPack.js",
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CRM Savannah"
+    }
+  }
+}
