@@ -1,0 +1,53 @@
+databases:
+  - name: crmsavannah-db
+    plan: free
+    databaseName: crmsavannah
+    user: crmsavannah
+
+services:
+  # Backend - API Express/Prisma
+  - type: web
+    name: crmsavannah-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    disk:
+      name: crmsavannah-arquivos
+      mountPath: /var/data/arquivos
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: crmsavannah-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 30d
+      - key: ARQUIVOS_DIR
+        value: /var/data/arquivos
+      - key: FRONTEND_URL
+        value: https://crmsavannah-frontend.onrender.com
+      - key: PUBLIC_URL
+        value: https://crmsavannah-backend.onrender.com
+      - key: BACKUP_HORARIO
+        value: 0 3 * * *
+      # Preencha manualmente pelo painel do Render depois do deploy (não vão no Blueprint
+      # por serem credenciais sensíveis específicas suas): WHATSAPP_API_URL,
+      # WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN, FTP_HOST, FTP_USER, FTP_PASSWORD,
+      # FTP_DESTINO, FTP_URL_PUBLICA, FTP_SECURE
+
+  # Frontend - Next.js (build standalone)
+  - type: web
+    name: crmsavannah-frontend
+    runtime: node
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run render-build
+    startCommand: npm run render-start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://crmsavannah-backend.onrender.com
